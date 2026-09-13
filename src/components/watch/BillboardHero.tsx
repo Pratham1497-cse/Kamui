@@ -2,28 +2,54 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayback } from '@/context/PlaybackContext';
+import { useExtensions } from '@/context/ExtensionsContext';
 import { ANIME_CATALOG, CATALOG_IDS } from '@/lib/catalog';
-import { AnimeArtSvg } from '@/components/visual/AnimeArtSvg';
+import { AnimeImagePreview } from '@/components/visual/AnimeImagePreview';
+import { AnimeRatingBadges } from '@/components/watch/AnimeRatingBadges';
+import { Puzzle, Flame, Bell, Clock, Bookmark, Check } from 'lucide-react';
+import { TrackerStatus } from '@/lib/types';
+import { useAnimeTracker } from '@/hooks/useAnimeTracker';
 
 export const BillboardHero: React.FC = () => {
-  const { playEpisode, openPreview, toggleWatchlist, isInWatchlist, isLiked, toggleLike } = usePlayback();
+  const {
+    playEpisode,
+    openPreview,
+    toggleWatchlist,
+    isInWatchlist,
+    isLiked,
+    toggleLike,
+    getAnimeTrackerStatus,
+    setAnimeTrackerStatus,
+    isNotificationSubscribed,
+    toggleNotificationSubscription
+  } = usePlayback();
+  const { activeExtension, openModal: openExtensionsModal } = useExtensions();
 
   const [activeId, setActiveId] = useState('kamui');
   const [isMuted, setIsMuted] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isTrackerMenuOpen, setIsTrackerMenuOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  const trackerInfo = useAnimeTracker(activeId);
   const anime = ANIME_CATALOG[activeId] || ANIME_CATALOG['kamui'];
+  const bannerImage = trackerInfo.bannerImage || anime.bannerImage;
+  const nextAiring = trackerInfo.nextAiring || anime.nextAiring;
   const inList = isInWatchlist(anime.id);
   const liked = isLiked(anime.id);
+  const hasActiveExtension = Boolean(activeExtension && activeExtension.enabled);
+  const currentTracker = getAnimeTrackerStatus(anime.id);
+  const isSubbed = isNotificationSubscribed(anime.id);
 
-  // Play video on active anime change
+  // Play video on active anime change only if active extension is installed
   useEffect(() => {
-    if (videoRef.current) {
+    if (videoRef.current && hasActiveExtension) {
       videoRef.current.currentTime = 0;
       videoRef.current.play().catch(() => {});
+    } else if (videoRef.current) {
+      videoRef.current.pause();
     }
-  }, [activeId]);
+  }, [activeId, hasActiveExtension]);
 
   const handleMuteToggle = () => {
     if (videoRef.current) {
@@ -32,27 +58,43 @@ export const BillboardHero: React.FC = () => {
     }
   };
 
+  const trackerOptions: { value: TrackerStatus; label: string }[] = [
+    { value: 'watching', label: 'Watching' },
+    { value: 'planning', label: 'Plan to Watch' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'on_hold', label: 'On Hold' },
+    { value: 'dropped', label: 'Dropped' }
+  ];
+
   return (
     <section
       className="billboard-hero"
       id="billboardHero"
       aria-label="Featured Anime Spotlight"
     >
-      {/* Background Video Stream */}
+      {/* Background Video Stream / Real Art Poster */}
       <div className="billboard-media-wrap" id="billboardMediaWrap">
-        <video
-          ref={videoRef}
-          className="billboard-video"
-          id="billboardVideoPlayer"
-          autoPlay
-          loop
-          muted={isMuted}
-          playsInline
-          preload="auto"
-          src={anime.trailerVideo}
-        />
-        <div className="billboard-fallback-art">
-          <AnimeArtSvg animeId={anime.id} />
+        {hasActiveExtension ? (
+          <video
+            ref={videoRef}
+            className="billboard-video"
+            id="billboardVideoPlayer"
+            autoPlay
+            loop
+            muted={isMuted}
+            playsInline
+            preload="auto"
+            src={anime.trailerVideo}
+          />
+        ) : null}
+        <div className="billboard-fallback-art" style={{ opacity: hasActiveExtension ? 0 : 1 }}>
+          <AnimeImagePreview
+            animeId={anime.id}
+            src={bannerImage}
+            alt={anime.title}
+            type="banner"
+            priority
+          />
         </div>
         <div className="billboard-vignette-left" />
         <div className="billboard-vignette-bottom" />
@@ -64,11 +106,21 @@ export const BillboardHero: React.FC = () => {
         <div className={`billboard-info ${isTransitioning ? 'transitioning' : 'transitioning-in'}`} id="billboardInfo">
           <div className="billboard-badge-row">
             <span className="billboard-badge billboard-badge-rank" id="billboardBadge">
-              <span className="badge-flame-icon">🔥</span> #1 in Anime Today · Newly Added
+              <span className="badge-flame-icon" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}>
+                <Flame size={13} color="#e8b94f" />
+              </span>
+              #1 in Anime Today · Simulcast
             </span>
             {anime.badge && (
               <span className="billboard-badge" id="billboardOriginBadge">
                 {anime.badge}
+              </span>
+            )}
+            {/* Airing countdown tag if simulcasting */}
+            {nextAiring && (
+              <span className="billboard-badge billboard-badge-airing">
+                <Clock size={12} style={{ marginRight: 4 }} />
+                Episode {nextAiring.episode} · {nextAiring.timeStr}
               </span>
             )}
           </div>
@@ -76,6 +128,11 @@ export const BillboardHero: React.FC = () => {
           <h1 className="billboard-title" id="billboardTitle">
             {anime.title}
           </h1>
+
+          {/* Multi-Platform Community Ratings (AniList, MAL, IMDb, TMDB) */}
+          <div style={{ margin: '10px 0 14px' }}>
+            <AnimeRatingBadges animeId={anime.id} title={anime.title} />
+          </div>
 
           <div className="billboard-meta-row">
             <span className="badge-match" id="billboardMatch">
@@ -88,7 +145,7 @@ export const BillboardHero: React.FC = () => {
             <span className="meta-dot">•</span>
             <span id="billboardSeasons" className="meta-seasons">{anime.seasonsCount}</span>
             <span className="meta-dot">•</span>
-            <span className="badge-hd">4K Ultra HD</span>
+            <span className="badge-hd">{activeExtension?.supportedResolutions?.[0] || '4K Ultra HD'}</span>
             <span className="badge-spatial">Dolby Atmos</span>
           </div>
 
@@ -109,13 +166,115 @@ export const BillboardHero: React.FC = () => {
               type="button"
               className="btn-billboard-play"
               id="billboardPlayBtn"
-              title="Start Streaming"
-              onClick={() => playEpisode(anime.id, 1)}
+              title={hasActiveExtension ? 'Start Streaming' : 'Add Extension to Stream'}
+              onClick={() => {
+                if (!hasActiveExtension) {
+                  openExtensionsModal('store');
+                } else {
+                  playEpisode(anime.id, 1);
+                }
+              }}
             >
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
+              {hasActiveExtension ? (
+                <>
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  <span id="billboardPlayText">Watch Now</span>
+                </>
+              ) : (
+                <>
+                  <Puzzle size={18} />
+                  <span id="billboardPlayText">Add Extension to Watch</span>
+                </>
+              )}
+            </button>
+
+            {/* Anime Tracker Status Button */}
+            <div className="tracker-dropdown-wrap" style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                type="button"
+                className={`btn-billboard-tracker ${currentTracker ? 'active' : ''}`}
+                id="billboardTrackerBtn"
+                title="Update Anime Tracking Status"
+                onClick={() => setIsTrackerMenuOpen(!isTrackerMenuOpen)}
+              >
+                <Bookmark size={17} style={{ marginRight: 6 }} />
+                <span>
+                  {currentTracker
+                    ? trackerOptions.find((o) => o.value === currentTracker)?.label
+                    : 'Track'}
+                </span>
+              </button>
+
+              {isTrackerMenuOpen && (
+                <div
+                  className="tracker-dropdown-menu"
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 8px)',
+                    left: 0,
+                    zIndex: 100
+                  }}
+                >
+                  {trackerOptions.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`tracker-menu-opt ${currentTracker === opt.value ? 'selected' : ''}`}
+                      onClick={() => {
+                        setAnimeTrackerStatus(anime.id, opt.value);
+                        setIsTrackerMenuOpen(false);
+                      }}
+                    >
+                      {currentTracker === opt.value && <Check size={14} style={{ marginRight: 6 }} />}
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                  {currentTracker && (
+                    <button
+                      type="button"
+                      className="tracker-menu-opt opt-remove"
+                      onClick={() => {
+                        setAnimeTrackerStatus(anime.id, null);
+                        setIsTrackerMenuOpen(false);
+                      }}
+                    >
+                      <span>Remove from Tracker</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Notify Me When Next Episode Drops Button */}
+            <button
+              type="button"
+              className={`btn-billboard-icon ${isSubbed ? 'active' : ''}`}
+              id="billboardNotifyBtn"
+              title={
+                isSubbed
+                  ? 'Simulcast alerts enabled (Click to disable)'
+                  : 'Notify me when next episode airs'
+              }
+              aria-label="Toggle simulcast episode alerts"
+              onClick={() => toggleNotificationSubscription(anime.id)}
+            >
+              <Bell size={18} fill={isSubbed ? 'currentColor' : 'none'} />
+            </button>
+
+            <button
+              type="button"
+              className="btn-billboard-icon"
+              id="billboardDetailsBtn"
+              title="Anime Details & Episodes"
+              aria-label="Anime Details & Episodes"
+              onClick={() => openPreview(anime.id)}
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
               </svg>
-              <span id="billboardPlayText">Watch Now</span>
             </button>
 
             <button

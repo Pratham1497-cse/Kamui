@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlayback } from '@/context/PlaybackContext';
+import { useExtensions } from '@/context/ExtensionsContext';
 import { ANIME_CATALOG } from '@/lib/catalog';
 import { CommentSection } from '@/components/comments/CommentSection';
+import { AnimeArtSvg } from '@/components/visual/AnimeArtSvg';
+import { AnimeRatingBadges } from '@/components/watch/AnimeRatingBadges';
+import { Puzzle, ChevronDown, Plus, MessageSquare } from 'lucide-react';
 
 export const FullVideoPlayer: React.FC = () => {
   const { playingAnimeId, playingEpNum, isPlayerOpen, closePlayer, openPreview, playEpisode, saveProgress } =
@@ -27,17 +31,25 @@ export const FullVideoPlayer: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [showLiveDiscussion, setShowLiveDiscussion] = useState(false);
+  const [serverMenuOpen, setServerMenuOpen] = useState(false);
 
+  const { extensions, activeExtensionId, activeExtension, setActiveExtension, openModal: openExtensionsModal } =
+    useExtensions();
+
+  const hasActiveExtension = Boolean(activeExtension && activeExtension.enabled);
   const speeds = [1.0, 1.25, 1.5, 2.0];
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize playback on open
+  // Initialize playback on open only when active extension is enabled
   useEffect(() => {
-    if (isPlayerOpen && videoRef.current && anime) {
+    if (isPlayerOpen && videoRef.current && anime && hasActiveExtension) {
       videoRef.current.currentTime = 0;
       videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
     }
-  }, [isPlayerOpen, playingAnimeId, playingEpNum]);
+  }, [isPlayerOpen, playingAnimeId, playingEpNum, hasActiveExtension]);
 
   // Handle saving progress periodically
   useEffect(() => {
@@ -212,18 +224,65 @@ export const FullVideoPlayer: React.FC = () => {
       style={{ display: isPlayerOpen ? 'block' : 'none' }}
     >
       <div className="full-player-wrapper" id="fullPlayerWrapper">
-        <video
-          ref={videoRef}
-          className="full-player-video"
-          id="fullStreamVideo"
-          playsInline
-          autoPlay
-          preload="auto"
-          src={anime.fullVideo}
-          onClick={togglePlay}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={handleNextEpisode}
-        />
+        {hasActiveExtension ? (
+          <video
+            ref={videoRef}
+            className="full-player-video"
+            id="fullStreamVideo"
+            playsInline
+            autoPlay
+            preload="auto"
+            src={anime.fullVideo}
+            onClick={togglePlay}
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={handleNextEpisode}
+          />
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+            <AnimeArtSvg animeId={anime.id} />
+          </div>
+        )}
+
+        {/* Extension Requirement Locked Screen */}
+        {!hasActiveExtension && (
+          <div className="player-ext-locked-screen">
+            <div className="player-ext-locked-card">
+              <div className="player-ext-locked-icon-badge">
+                <Puzzle size={28} />
+              </div>
+              <h2 className="player-ext-locked-title">Streaming Extension Required</h2>
+              <div className="player-ext-locked-anime-name">
+                {anime.title} — Episode {currentEp?.num || playingEpNum}: {currentEp?.title || 'Simulcast'}
+              </div>
+              <div style={{ margin: '0 auto 16px', display: 'flex', justifyContent: 'center' }}>
+                <AnimeRatingBadges animeId={anime.id} title={anime.title} />
+              </div>
+              <p className="player-ext-locked-desc">
+                Kamui operates as a decentralized anime client. To stream episodes in 4K HDR, please install and enable an anime source extension from the Extension Store.
+              </p>
+              <div className="player-ext-locked-actions">
+                <button
+                  type="button"
+                  className="btn-open-store-primary"
+                  onClick={() => openExtensionsModal('store')}
+                >
+                  <Puzzle size={16} />
+                  <span>Open Extension Store</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-player-back-sec"
+                  onClick={() => {
+                    closePlayer();
+                    openPreview(anime.id);
+                  }}
+                >
+                  <span>View Anime Details</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Top Controls Bar */}
         <div
@@ -252,7 +311,78 @@ export const FullVideoPlayer: React.FC = () => {
           <div className="player-anime-label" id="playerCurrentEpTitle">
             {anime.title} — Episode {currentEp?.num || playingEpNum}: {currentEp?.title || 'Simulcast'}
           </div>
-          <div className="player-quality-pill">4K HDR</div>
+
+          {/* Extension / Streaming Server Selector */}
+          <div className="player-source-selector-wrap">
+            <button
+              type="button"
+              className="player-server-switch-btn"
+              onClick={() => {
+                if (extensions.length === 0) {
+                  openExtensionsModal('store');
+                } else {
+                  setServerMenuOpen(!serverMenuOpen);
+                }
+              }}
+              title={activeExtension ? 'Switch Streaming Source Extension' : 'No extension installed (Click to browse store)'}
+            >
+              <Puzzle size={13} className="text-gold" />
+              <span className="player-server-name">{activeExtension ? activeExtension.name : 'No Source (+ Add)'}</span>
+              {activeExtension && (
+                <span className="player-server-ping">({activeExtension.latencyMs}ms)</span>
+              )}
+              <ChevronDown size={12} />
+            </button>
+
+            {serverMenuOpen && (
+              <div className="player-server-dropdown custom-scrollbar">
+                <div className="player-server-dropdown-head">
+                  <span>STREAMING SOURCE EXTENSION</span>
+                </div>
+                {extensions.filter((e) => e.enabled).length === 0 ? (
+                  <div className="player-server-empty">
+                    <span>No extensions installed</span>
+                  </div>
+                ) : (
+                  extensions
+                    .filter((e) => e.enabled)
+                    .map((ext) => (
+                      <div
+                        key={ext.id}
+                        className={`player-server-item ${ext.id === activeExtensionId ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveExtension(ext.id);
+                          setServerMenuOpen(false);
+                        }}
+                      >
+                        <div className="server-item-left">
+                          <span className={`server-dot ${ext.status}`} />
+                          <span className="server-name">{ext.name}</span>
+                        </div>
+                        <div className="server-item-right">
+                          <span className="server-proto">{ext.streamType.toUpperCase()}</span>
+                          <span className="server-ping">{ext.latencyMs}ms</span>
+                        </div>
+                      </div>
+                    ))
+                )}
+                <div
+                  className="player-server-add-link"
+                  onClick={() => {
+                    setServerMenuOpen(false);
+                    openExtensionsModal(extensions.length === 0 ? 'store' : 'add');
+                  }}
+                >
+                  <Plus size={13} />
+                  <span>{extensions.length === 0 ? '+ Install from Store' : '+ Add More Extensions...'}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="player-quality-pill">
+            {activeExtension?.supportedResolutions?.[0] || '4K HDR'}
+          </div>
         </div>
 
         {/* Skip Intro Button */}
@@ -463,7 +593,10 @@ export const FullVideoPlayer: React.FC = () => {
             <div className="player-chat-drawer">
               <div className="player-chat-head">
                 <div className="player-chat-title">
-                  <span>💬 Live Chat · Episode {playingEpNum}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <MessageSquare size={14} />
+                    Live Chat · Episode {playingEpNum}
+                  </span>
                 </div>
                 <button
                   type="button"

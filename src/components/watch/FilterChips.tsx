@@ -11,14 +11,17 @@ interface GenreChip {
 
 const GENRES: GenreChip[] = [
   { id: 'all', label: 'All', sectionId: 'contentRowsContainer' },
-  { id: 'liked', label: '👍 Liked', sectionId: 'likedAnimeSection' },
-  { id: 'watchlist', label: '🔖 My List', sectionId: 'myWatchlistSection' },
-  { id: 'Dark fantasy', label: 'Dark fantasy', sectionId: 'darkFantasySection' },
-  { id: 'Sci-fi', label: 'Sci-fi', sectionId: 'scifiSection' },
+  { id: 'tracking-watching', label: 'Watching', sectionId: 'fullCatalogSection' },
+  { id: 'tracking-planning', label: 'Plan to Watch', sectionId: 'fullCatalogSection' },
+  { id: 'tracking-completed', label: 'Completed', sectionId: 'fullCatalogSection' },
+  { id: 'liked', label: 'Liked', sectionId: 'likedAnimeSection' },
+  { id: 'watchlist', label: 'My List', sectionId: 'myWatchlistSection' },
+  { id: 'Dark fantasy', label: 'Dark Fantasy', sectionId: 'darkFantasySection' },
+  { id: 'Sci-fi', label: 'Sci-Fi', sectionId: 'scifiSection' },
   { id: 'Mecha', label: 'Mecha', sectionId: 'mechaSection' },
   { id: 'Mystery', label: 'Mystery', sectionId: 'mysterySection' },
   { id: 'Romance', label: 'Romance', sectionId: 'romanceSection' },
-  { id: 'Slice of life', label: 'Slice of life', sectionId: 'sliceOfLifeSection' },
+  { id: 'Slice of life', label: 'Slice of Life', sectionId: 'sliceOfLifeSection' },
   { id: 'Adventure', label: 'Adventure', sectionId: 'adventureSection' },
   { id: 'Psychological', label: 'Psychological', sectionId: 'psychologicalSection' },
   { id: 'Movies', label: 'Movies', sectionId: 'moviesSection' }
@@ -42,21 +45,24 @@ export const FilterChips: React.FC = () => {
 
   return (
     <section className="filter-chips-section" id="filterChipsSection">
-      <div className="wrap">
+      <div className="wrap filter-chips-wrap">
         <div className="filter-bar" id="filterBar">
-          {GENRES.map((item) => (
-            <button
-              key={item.id}
-              id={`filter-chip-${item.id.toLowerCase().replace(/[\s&]+/g, '-')}`}
-              type="button"
-              className={`filter-chip ${filterGenre.toLowerCase() === item.id.toLowerCase() ? 'active' : ''}`}
-              data-section={item.sectionId}
-              onClick={() => handleChipClick(item)}
-              title={`View ${item.label} section`}
-            >
-              {item.label}
-            </button>
-          ))}
+          {GENRES.map((item) => {
+            const isActive = filterGenre.toLowerCase() === item.id.toLowerCase();
+            return (
+              <button
+                key={item.id}
+                id={`filter-chip-${item.id.toLowerCase().replace(/[\s&]+/g, '-')}`}
+                type="button"
+                className={`filter-chip ${isActive ? 'active' : ''}`}
+                data-section={item.sectionId}
+                onClick={() => handleChipClick(item)}
+                title={`Filter by ${item.label}`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
